@@ -72,6 +72,7 @@ dados_classificacao = dados_times %>%
                             TRUE ~ 0)) %>%
   group_by(time) %>%
   summarise(pontos = sum(pontos),
+            jogos = n(),
             vitorias = sum(resultado == "vitoria"),
             empates = sum(resultado == "empate"),
             derrotas = sum(resultado == "derrota")) %>%
@@ -95,8 +96,7 @@ probabilidades_casa = dados_partidas_sem_na %>%
             total_jogos_casa = n()) %>%
   mutate(prob_vitoria_casa = vitorias_casa / total_jogos_casa,
          prob_empate_casa = empates_casa / total_jogos_casa,
-         prob_derrota_casa = derrotas_casa / total_jogos_casa) %>%
-  select(home, prob_vitoria_casa, prob_empate_casa, prob_derrota_casa)
+         prob_derrota_casa = derrotas_casa / total_jogos_casa)
 
 # Calculando a probabilidade de cada time vencer, empatar e perder fora de casa
 probabilidades_fora = dados_partidas_sem_na %>%
@@ -107,12 +107,11 @@ probabilidades_fora = dados_partidas_sem_na %>%
             total_jogos_fora = n()) %>%
   mutate(prob_vitoria_fora = vitorias_fora / total_jogos_fora,
          prob_empate_fora = empates_fora / total_jogos_fora,
-         prob_derrota_fora = derrotas_fora / total_jogos_fora) %>%
-  select(away, prob_vitoria_fora, prob_empate_fora, prob_derrota_fora)
+         prob_derrota_fora = derrotas_fora / total_jogos_fora)
 
 # Renomeando as colunas dos data.frames para melhorar a legibilidade
-colnames(probabilidades_casa) = c("time", "prob_vitoria_casa", "prob_empate_casa", "prob_derrota_casa")
-colnames(probabilidades_fora) = c("time", "prob_vitoria_fora", "prob_empate_fora", "prob_derrota_fora")
+colnames(probabilidades_casa) = c("time", "vitorias_casa", "empates_casa", "derrotas_casa", "total_jogos_casa", "prob_vitoria_casa", "prob_empate_casa", "prob_derrota_casa")
+colnames(probabilidades_fora) = c("time", "vitorias_fora", "empates_fora", "derrotas_fora", "total_jogos_fora", "prob_vitoria_fora", "prob_empate_fora", "prob_derrota_fora")
 
 # Exibindo as probabilidades para cada time em casa
 print(probabilidades_casa)
@@ -126,15 +125,29 @@ print(probabilidades_fora)
 # ---------------------------------------------------------------------------- #
 # ---------------------------------------------------------------------------- #
 
+# Realizar o left join das tabelas com base na coluna "time"
+dados_completos <- dados_classificacao %>%
+  left_join(probabilidades_casa, by = "time") %>%
+  left_join(probabilidades_fora, by = "time")
+
+# Exibir a tabela completa
+print(dados_completos)
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
 # Função para calcular as probabilidades do jogo
-calcular_probabilidades_jogo = function(time_home, time_away, probabilidades_casa, probabilidades_fora) {
-  pva = probabilidades_casa$prob_vitoria_casa[probabilidades_casa$time == time_home]
-  pea = probabilidades_casa$prob_empate_casa[probabilidades_casa$time == time_home]
-  pda = probabilidades_casa$prob_derrota_casa[probabilidades_casa$time == time_home]
+calcular_probabilidades_jogo = function(time_home, time_away, dados_completos) {
+  pva = dados_completos$prob_vitoria_casa[dados_completos$time == time_home]
+  pea = dados_completos$prob_empate_casa[dados_completos$time == time_home]
+  pda = dados_completos$prob_derrota_casa[dados_completos$time == time_home]
   
-  pvb = probabilidades_fora$prob_vitoria_fora[probabilidades_fora$time == time_away]
-  peb = probabilidades_fora$prob_empate_fora[probabilidades_fora$time == time_away]
-  pdb = probabilidades_fora$prob_derrota_fora[probabilidades_fora$time == time_away]
+  pvb = dados_completos$prob_vitoria_fora[dados_completos$time == time_away]
+  peb = dados_completos$prob_empate_fora[dados_completos$time == time_away]
+  pdb = dados_completos$prob_derrota_fora[dados_completos$time == time_away]
   
   prob_vitoria = (pva + pdb) / 2
   prob_empate = (pea + peb) / 2
@@ -159,17 +172,6 @@ definir_resultado_partida = function(probabilidades_jogo) {
   }
 }
 
-# Função para calcular os pontos com base no resultado
-calcular_pontos = function(resultado) {
-  if (resultado == "Vitória do time home") {
-    return(3)
-  } else if (resultado == "Empate") {
-    return(1)
-  } else if (resultado == "Vitória do time away") {
-    return(0)
-  }
-}
-
 # ---------------------------------------------------------------------------- #
 # ---------------------------------------------------------------------------- #
 # ---------------------------------------------------------------------------- #
@@ -177,14 +179,14 @@ calcular_pontos = function(resultado) {
 # ---------------------------------------------------------------------------- #
 
 # Função para realizar a simulação de um campeonato
-simular_campeonato = function(dados_classificacao, dados_partidas_com_na, probabilidades_casa, probabilidades_fora) {
+simular_campeonato = function(dados_completos, dados_partidas_com_na) {
   # Loop para definir os resultados de todas as partidas
   resultados = c()
   for (i in 1:nrow(dados_partidas_com_na)) {
     time_home = dados_partidas_com_na$home[i]
     time_away = dados_partidas_com_na$away[i]
     
-    probabilidades_jogo = calcular_probabilidades_jogo(time_home, time_away, probabilidades_casa, probabilidades_fora)
+    probabilidades_jogo = calcular_probabilidades_jogo(time_home, time_away, dados_completos)
     resultado_partida = definir_resultado_partida(probabilidades_jogo)
     resultados = c(resultados, resultado_partida)
   }
@@ -196,95 +198,99 @@ simular_campeonato = function(dados_classificacao, dados_partidas_com_na, probab
     resultado = resultados
   )
   
-  # Inicializar a tabela de classificação
-  tabela_classificacao = data.frame(
-    time = unique(c(dados_partidas_com_na$home, dados_partidas_com_na$away)),
-    pontos = rep(0, length(unique(c(dados_partidas_com_na$home, dados_partidas_com_na$away)))),
-    vitorias = rep(0, length(unique(c(dados_partidas_com_na$home, dados_partidas_com_na$away)))),
-    empates = rep(0, length(unique(c(dados_partidas_com_na$home, dados_partidas_com_na$away)))),
-    derrotas = rep(0, length(unique(c(dados_partidas_com_na$home, dados_partidas_com_na$away))))
-  )
-  
   # Atualizar a tabela de classificação com base nos resultados das partidas
   for (i in 1:nrow(resultado_das_partidas)) {
     time_home = resultado_das_partidas$home[i]
     time_away = resultado_das_partidas$away[i]
     resultado = resultado_das_partidas$resultado[i]
     
-    pontos = calcular_pontos(resultado)
-    
     # Atualizar o time home
-    index_home = which(tabela_classificacao$time == time_home)
-    tabela_classificacao$pontos[index_home] = tabela_classificacao$pontos[index_home] + pontos
+    index_home = which(dados_completos$time == time_home)
     if (resultado == "Vitória do time home") {
-      tabela_classificacao$vitorias[index_home] = tabela_classificacao$vitorias[index_home] + 1
-      # Aumentar a probabilidade de vitória do time home
-      probabilidades_casa$prob_empate_casa[which(probabilidades_casa$time == time_home)] = max(0, probabilidades_casa$prob_empate_casa[which(probabilidades_casa$time == time_home)] - 0.025)
-      probabilidades_casa$prob_derrota_casa[which(probabilidades_casa$time == time_home)] = max(0, probabilidades_casa$prob_derrota_casa[which(probabilidades_casa$time == time_home)] - 0.025)
-      probabilidades_casa$prob_vitoria_casa[which(probabilidades_casa$time == time_home)] = 1 - probabilidades_casa$prob_empate_casa[which(probabilidades_casa$time == time_home)] - probabilidades_casa$prob_derrota_casa[which(probabilidades_casa$time == time_home)]
+      # Atualizar os pontos
+      dados_completos$pontos[index_home] = dados_completos$pontos[index_home] + 3
+      # Atualizar os jogos
+      dados_completos$jogos[index_home] = dados_completos$jogos[index_home] + 1
+      dados_completos$total_jogos_casa[index_home] = dados_completos$total_jogos_casa[index_home] + 1
+      # Atualizar as vitórias
+      dados_completos$vitorias[index_home] = dados_completos$vitorias[index_home] + 1
+      dados_completos$vitorias_casa[index_home] = dados_completos$vitorias_casa[index_home] + 1
+      # Atualizar as probabilidades
+      dados_completos$prob_vitoria_casa[index_home] = dados_completos$vitorias_casa[index_home]/dados_completos$total_jogos_casa[index_home]
+      dados_completos$prob_empate_casa[index_home] = dados_completos$empates_casa[index_home]/dados_completos$total_jogos_casa[index_home]
+      dados_completos$prob_derrota_casa[index_home] = dados_completos$derrotas_casa[index_home]/dados_completos$total_jogos_casa[index_home]
     } else if (resultado == "Empate") {
-      tabela_classificacao$empates[index_home] = tabela_classificacao$empates[index_home] + 1
-      # Aumentar a probabilidade de empate do time home
-      probabilidades_casa$prob_vitoria_casa[which(probabilidades_casa$time == time_home)] = max(0, probabilidades_casa$prob_vitoria_casa[which(probabilidades_casa$time == time_home)] - 0.025)
-      probabilidades_casa$prob_derrota_casa[which(probabilidades_casa$time == time_home)] = max(0, probabilidades_casa$prob_derrota_casa[which(probabilidades_casa$time == time_home)] - 0.025)
-      probabilidades_casa$prob_empate_casa[which(probabilidades_casa$time == time_home)] = 1 - probabilidades_casa$prob_vitoria_casa[which(probabilidades_casa$time == time_home)] - probabilidades_casa$prob_derrota_casa[which(probabilidades_casa$time == time_home)]
+      # Atualizar os pontos
+      dados_completos$pontos[index_home] = dados_completos$pontos[index_home] + 1
+      # Atualizar os jogos
+      dados_completos$jogos[index_home] = dados_completos$jogos[index_home] + 1
+      dados_completos$total_jogos_casa[index_home] = dados_completos$total_jogos_casa[index_home] + 1
+      # Atualizar os empates
+      dados_completos$empates[index_home] = dados_completos$empates[index_home] + 1
+      dados_completos$empates_casa[index_home] = dados_completos$empates_casa[index_home] + 1
+      # Atualizar as probabilidades
+      dados_completos$prob_vitoria_casa[index_home] = dados_completos$vitorias_casa[index_home]/dados_completos$total_jogos_casa[index_home]
+      dados_completos$prob_empate_casa[index_home] = dados_completos$empates_casa[index_home]/dados_completos$total_jogos_casa[index_home]
+      dados_completos$prob_derrota_casa[index_home] = dados_completos$derrotas_casa[index_home]/dados_completos$total_jogos_casa[index_home] 
     } else if (resultado == "Vitória do time away") {
-      tabela_classificacao$derrotas[index_home] = tabela_classificacao$derrotas[index_home] + 1
-      # Aumentar a probabilidade de derrota do time home
-      probabilidades_casa$prob_vitoria_casa[which(probabilidades_casa$time == time_home)] = max(0, probabilidades_casa$prob_vitoria_casa[which(probabilidades_casa$time == time_home)] - 0.25)
-      probabilidades_casa$prob_empate_casa[which(probabilidades_casa$time == time_home)] = max(0, probabilidades_casa$prob_empate_casa[which(probabilidades_casa$time == time_home)] - 0.25)
-      probabilidades_casa$prob_derrota_casa[which(probabilidades_casa$time == time_home)] = 1 - probabilidades_casa$prob_vitoria_casa[which(probabilidades_casa$time == time_home)] - probabilidades_casa$prob_empate_casa[which(probabilidades_casa$time == time_home)]
+      # Atualizar os jogos
+      dados_completos$jogos[index_home] = dados_completos$jogos[index_home] + 1
+      dados_completos$total_jogos_casa[index_home] = dados_completos$total_jogos_casa[index_home] + 1
+      # Atualizar as derrotas
+      dados_completos$derrotas[index_home] = dados_completos$empates[index_home] + 1
+      dados_completos$derrotas_casa[index_home] = dados_completos$derrotas_casa[index_home] + 1
+      # Atualizar as probabilidades
+      dados_completos$prob_vitoria_casa[index_home] = dados_completos$vitorias_casa[index_home]/dados_completos$total_jogos_casa[index_home]
+      dados_completos$prob_empate_casa[index_home] = dados_completos$empates_casa[index_home]/dados_completos$total_jogos_casa[index_home]
+      dados_completos$prob_derrota_casa[index_home] = dados_completos$derrotas_casa[index_home]/dados_completos$total_jogos_casa[index_home] 
     }
     
     # Atualizar o time away
-    index_away = which(tabela_classificacao$time == time_away)
-    tabela_classificacao$pontos[index_away] = tabela_classificacao$pontos[index_away] + (3 - pontos) # Pontos para o time away
+    index_away = which(dados_completos$time == time_away)
     if (resultado == "Vitória do time away") {
-      tabela_classificacao$vitorias[index_away] = tabela_classificacao$vitorias[index_away] + 1
-      # Aumentar a probabilidade de derrota do time away
-      probabilidades_fora$prob_vitoria_fora[which(probabilidades_fora$time == time_away)] = max(0, probabilidades_fora$prob_vitoria_fora[which(probabilidades_fora$time == time_away)] - 0.025)
-      probabilidades_fora$prob_empate_fora[which(probabilidades_fora$time == time_away)] = max(0, probabilidades_fora$prob_empate_fora[which(probabilidades_fora$time == time_away)] - 0.025)
-      probabilidades_fora$prob_derrota_fora[which(probabilidades_fora$time == time_away)] = 1 - probabilidades_fora$prob_vitoria_fora[which(probabilidades_fora$time == time_away)] - probabilidades_fora$prob_empate_fora[which(probabilidades_fora$time == time_away)]
+      # Atualizar os pontos
+      dados_completos$pontos[index_away] = dados_completos$pontos[index_away] + 3
+      # Atualizar os jogos
+      dados_completos$jogos[index_away] = dados_completos$jogos[index_away] + 1
+      dados_completos$total_jogos_fora[index_away] = dados_completos$total_jogos_fora[index_away] + 1
+      # Atualizar as vitórias
+      dados_completos$vitorias[index_away] = dados_completos$vitorias[index_away] + 1
+      dados_completos$vitorias_fora[index_away] = dados_completos$vitorias_fora[index_away] + 1
+      # Atualizar as probabilidades
+      dados_completos$prob_vitoria_fora[index_away] = dados_completos$vitorias_fora[index_away]/dados_completos$total_jogos_fora[index_away]
+      dados_completos$prob_empate_fora[index_away] = dados_completos$empates_fora[index_away]/dados_completos$total_jogos_fora[index_away]
+      dados_completos$prob_derrota_fora[index_away] = dados_completos$derrotas_fora[index_away]/dados_completos$total_jogos_fora[index_away]
     } else if (resultado == "Empate") {
-      tabela_classificacao$empates[index_away] = tabela_classificacao$empates[index_away] + 1
-      # Aumentar a probabilidade de empate do time away
-      probabilidades_fora$prob_vitoria_fora[which(probabilidades_fora$time == time_away)] = max(0, probabilidades_fora$prob_vitoria_fora[which(probabilidades_fora$time == time_away)] - 0.025)
-      probabilidades_fora$prob_derrota_fora[which(probabilidades_fora$time == time_away)] = max(0, probabilidades_fora$prob_derrota_fora[which(probabilidades_fora$time == time_away)] - 0.025)
-      probabilidades_fora$prob_empate_fora[which(probabilidades_fora$time == time_away)] = 1 - probabilidades_fora$prob_vitoria_fora[which(probabilidades_fora$time == time_away)] - probabilidades_fora$prob_derrota_fora[which(probabilidades_fora$time == time_away)]
+      # Atualizar os pontos
+      dados_completos$pontos[index_away] = dados_completos$pontos[index_away] + 1
+      # Atualizar os jogos
+      dados_completos$jogos[index_away] = dados_completos$jogos[index_away] + 1
+      dados_completos$total_jogos_fora[index_away] = dados_completos$total_jogos_fora[index_away] + 1
+      # Atualizar os empates
+      dados_completos$empates[index_away] = dados_completos$empates[index_away] + 1
+      dados_completos$empates_fora[index_away] = dados_completos$empates_fora[index_away] + 1
+      # Atualizar as probabilidades
+      dados_completos$prob_vitoria_fora[index_away] = dados_completos$vitorias_fora[index_away]/dados_completos$total_jogos_fora[index_away]
+      dados_completos$prob_empate_fora[index_away] = dados_completos$empates_fora[index_away]/dados_completos$total_jogos_fora[index_away]
+      dados_completos$prob_derrota_fora[index_away] = dados_completos$derrotas_fora[index_away]/dados_completos$total_jogos_fora[index_away]
     } else if (resultado == "Vitória do time home") {
-      tabela_classificacao$derrotas[index_away] = tabela_classificacao$derrotas[index_away] + 1
-      # Aumentar a probabilidade de vitória do time away
-      probabilidades_fora$prob_empate_fora[which(probabilidades_fora$time == time_away)] = max(0, probabilidades_fora$prob_empate_fora[which(probabilidades_fora$time == time_away)] - 0.025)
-      probabilidades_fora$prob_derrota_fora[which(probabilidades_fora$time == time_away)] = max(0, probabilidades_fora$prob_derrota_fora[which(probabilidades_fora$time == time_away)] - 0.025)
-      probabilidades_fora$prob_vitoria_fora[which(probabilidades_fora$time == time_away)] = 1 - probabilidades_fora$prob_empate_fora[which(probabilidades_fora$time == time_away)] - probabilidades_fora$prob_derrota_fora[which(probabilidades_fora$time == time_away)]
+      # Atualizar os jogos
+      dados_completos$jogos[index_away] = dados_completos$jogos[index_away] + 1
+      dados_completos$total_jogos_fora[index_away] = dados_completos$total_jogos_fora[index_away] + 1
+      # Atualizar as derrotas
+      dados_completos$derrotas[index_away] = dados_completos$derrotas[index_away] + 1
+      dados_completos$derrotas_fora[index_away] = dados_completos$derrotas_fora[index_away] + 1
+      # Atualizar as probabilidades
+      dados_completos$prob_vitoria_fora[index_away] = dados_completos$vitorias_fora[index_away]/dados_completos$total_jogos_fora[index_away]
+      dados_completos$prob_empate_fora[index_away] = dados_completos$empates_fora[index_away]/dados_completos$total_jogos_fora[index_away]
+      dados_completos$prob_derrota_fora[index_away] = dados_completos$derrotas_fora[index_away]/dados_completos$total_jogos_fora[index_away]
     }
   }
   
   # Ordenar a tabela de classificação por pontos e, em caso de empate, por vitórias
-  tabela_classificacao = tabela_classificacao[order(-tabela_classificacao$pontos, -tabela_classificacao$vitorias), ]
+  dados_completos = dados_completos[order(-dados_completos$pontos, -dados_completos$vitorias), ]
   
-  # ---------------------------------------------------------------------------- #
-  # ---------------------------------------------------------------------------- #
-  # ---------------------------------------------------------------------------- #
-  # ---------------------------------------------------------------------------- #
-  # ---------------------------------------------------------------------------- #
-  
-  # Encontra os índices correspondentes aos times em tabela_classificacao
-  indices = match(dados_classificacao$time, tabela_classificacao$time)
-  
-  # Soma as informações de pontos, vitórias, empates e derrotas
-  dados_classificacao$pontos_total = dados_classificacao$pontos + tabela_classificacao$pontos[indices]
-  dados_classificacao$vitorias_total = dados_classificacao$vitorias + tabela_classificacao$vitorias[indices]
-  dados_classificacao$empates_total = dados_classificacao$empates + tabela_classificacao$empates[indices]
-  dados_classificacao$derrotas_total = dados_classificacao$derrotas + tabela_classificacao$derrotas[indices]
-  
-  # Remove as colunas repetidas (caso desejado)
-  dados_classificacao = subset(dados_classificacao, select = -c(pontos, vitorias,empates, derrotas)) 
-  
-  # Ordena o data frame pelos pontos em ordem decrescente
-  dados_classificacao = dados_classificacao[order(-dados_classificacao$pontos_total), ]
-  
-  return(dados_classificacao)
+  return(dados_completos)
 }
 
 # ---------------------------------------------------------------------------- #
@@ -328,15 +334,15 @@ resultado_simulacoes = data.frame(
 for (i in 1:num_simulacoes) {
   pb$tick()
   
-  tabela_classificacao_simulacao = simular_campeonato(dados_classificacao, dados_partidas_com_na, probabilidades_casa, probabilidades_fora)
+  tabela_classificacao_simulacao = simular_campeonato(dados_completos, dados_partidas_com_na)
   
   # Incrementar a probabilidade do time campeão
-  tabela_classificacao_simulacao$campeao = row_number(desc(tabela_classificacao_simulacao$pontos_total)) <= 1
+  tabela_classificacao_simulacao$campeao = row_number(desc(tabela_classificacao_simulacao$pontos)) <= 1
   resultado_simulacoes$probabilidade_campeao[match(tabela_classificacao_simulacao$time, resultado_simulacoes$time)] = 
     resultado_simulacoes$probabilidade_campeao[match(tabela_classificacao_simulacao$time, resultado_simulacoes$time)] + as.numeric(tabela_classificacao_simulacao$campeao)
   
   # Incrementar a probabilidade do time classificar para a Libertadores (6 primeiros colocados)
-  tabela_classificacao_simulacao$libertadores = row_number(desc(tabela_classificacao_simulacao$pontos_total)) <= 6
+  tabela_classificacao_simulacao$libertadores = row_number(desc(tabela_classificacao_simulacao$pontos)) <= 6
   resultado_simulacoes$probabilidade_libertadores[match(tabela_classificacao_simulacao$time, resultado_simulacoes$time)] = 
     resultado_simulacoes$probabilidade_libertadores[match(tabela_classificacao_simulacao$time, resultado_simulacoes$time)] + as.numeric(tabela_classificacao_simulacao$libertadores)
   
@@ -356,4 +362,3 @@ resultado_simulacoes = resultado_simulacoes[order(-resultado_simulacoes$probabil
 
 # Exibir a tabela com as probabilidades
 print(resultado_simulacoes)
-
