@@ -8,4 +8,5 @@ Assim, este projeto se destaca ao oferecer uma análise, auxiliando na compreens
 
 ## Referências
 [1] LIMA, B.N.B.; BROCHERO, F.; COSTA, G.N.; MARTINS, R.V (2008). Futebol: uma caixinha... de sorteios. Ciência Hoje, v. 254, p. 24-29. 
+
 [2] MARTINS, R.V.; LIMA, B.N.B.; BROCHERO, F.; COSTA, G.N.; ZEFERINO, G.M (2010). Probabilidades no futebol. Matemática Universitária, v. 48/49, p. 15-31.
