@@ -1,35 +1,36 @@
 # Carregar bibliotecas
 library(tidyverse)
+library(ggplot2)
 library(progress)
 library(rvest)
 
 # Raspagem de dados
-dado_cbf <- read_html("https://www.cbf.com.br/futebol-brasileiro/competicoes/campeonato-brasileiro-serie-a/2023")
+dado_cbf = read_html("https://www.cbf.com.br/futebol-brasileiro/competicoes/campeonato-brasileiro-serie-a/2023")
 
 # Seleção dos elementos da página
-resultados <- dado_cbf %>% 
+resultados = dado_cbf %>% 
   html_nodes(".aside-content .clearfix")
 
 # Extração das equipes em casa
-casa <- resultados %>%
-        html_nodes(".pull-left img") %>%
-        html_attr("title")
+casa = resultados %>%
+  html_nodes(".pull-left img") %>%
+  html_attr("title")
 
 # Extração das equipes visitantes
-fora_casa <- resultados %>%
-             html_nodes(".pull-right img") %>%
-             html_attr("title")
+fora_casa = resultados %>%
+  html_nodes(".pull-right img") %>%
+  html_attr("title")
 
 # Extração dos placares
-placar <- resultados %>% 
+placar = resultados %>% 
   html_nodes(".partida-horario") %>% 
   html_text() %>% 
   str_extract("[0-9]{1}\ x\ [0-9]{1}")
 
 # Organização dos dados em um dataframe
-dados_partidas <- data.frame(home = casa, 
-                 score = placar,
-                 away = fora_casa) %>%
+dados_partidas = data.frame(home = casa, 
+                             score = placar,
+                             away = fora_casa) %>%
   separate(col = score, into = c("home_score","away_score"), sep = "x")
 
 # ---------------------------------------------------------------------------- #
@@ -126,12 +127,107 @@ print(probabilidades_fora)
 # ---------------------------------------------------------------------------- #
 
 # Realizar o left join das tabelas com base na coluna "time"
-dados_completos <- dados_classificacao %>%
+dados_completos = dados_classificacao %>%
   left_join(probabilidades_casa, by = "time") %>%
   left_join(probabilidades_fora, by = "time")
 
 # Exibir a tabela completa
 print(dados_completos)
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+# Estatíticas
+
+# Função para calcular as sequências e armazenar em outra tabela
+calcular_sequencias = function(dataframe) {
+  # Inicializar a tabela para armazenar as sequências
+  sequencias_table = data.frame(
+    team = character(0),
+    sequencia_vitorias = integer(0),
+    sequencia_derrotas = integer(0),
+    sequencia_invictas = integer(0),
+    sequencia_sem_vitorias = integer(0)
+  )
+  
+  # Obter a lista de times únicos
+  times_unicos = unique(c(dataframe$home, dataframe$away))
+  
+  # Loop através dos times únicos
+  for (team in times_unicos) {
+    # Filtrar os jogos do time
+    team_games = subset(dataframe, home == team | away == team)
+    
+    # Calcular as sequências para o time
+    sequencia_vitorias = 0
+    sequencia_derrotas = 0
+    sequencia_invictas = 0
+    sequencia_sem_vitorias = 0
+    
+    for (i in 1:nrow(team_games)) {
+      if (team_games[i, "home"] == team) {
+        if (team_games[i, "home_score"] > team_games[i, "away_score"]) {
+          sequencia_vitorias = sequencia_vitorias + 1
+          sequencia_derrotas = 0
+          sequencia_invictas = sequencia_invictas + 1
+          sequencia_sem_vitorias = 0
+        } else if (team_games[i, "home_score"] < team_games[i, "away_score"]) {
+          sequencia_vitorias = 0
+          sequencia_derrotas = sequencia_derrotas + 1
+          sequencia_invictas = 0
+          sequencia_sem_vitorias = sequencia_sem_vitorias + 1
+        } else {
+          sequencia_vitorias = 0
+          sequencia_derrotas = 0
+          sequencia_invictas = sequencia_invictas + 1
+          sequencia_sem_vitorias = sequencia_sem_vitorias + 1
+        }
+      } else {
+        if (team_games[i, "away_score"] > team_games[i, "home_score"]) {
+          sequencia_vitorias = sequencia_vitorias + 1
+          sequencia_derrotas = 0
+          sequencia_invictas = sequencia_invictas + 1
+          sequencia_sem_vitorias = 0
+        } else if (team_games[i, "away_score"] < team_games[i, "home_score"]) {
+          sequencia_vitorias = 0
+          sequencia_derrotas = sequencia_derrotas + 1
+          sequencia_invictas = 0
+          sequencia_sem_vitorias = sequencia_sem_vitorias + 1
+        } else {
+          sequencia_vitorias = 0
+          sequencia_derrotas = 0
+          sequencia_invictas = sequencia_invictas + 1
+          sequencia_sem_vitorias = sequencia_sem_vitorias + 1
+        }
+      }
+      
+      # Armazenar as sequências na tabela
+      sequencias_table = rbind(sequencias_table, data.frame(
+        team = team,
+        sequencia_vitorias = sequencia_vitorias,
+        sequencia_derrotas = sequencia_derrotas,
+        sequencia_invictas = sequencia_invictas,
+        sequencia_sem_vitorias = sequencia_sem_vitorias
+      ))
+    }
+  }
+  
+  return(sequencias_table)
+}
+
+
+# Calcular as sequências
+sequencias = calcular_sequencias(dados_partidas_sem_na)
+
+# Agrupar e selecionar a última linha de cada grupo
+sequencias %>%
+  group_by(team) %>%
+  slice_tail(n = 1) %>%
+  ungroup() %>%
+  arrange(desc(sequencia_vitorias))
 
 # ---------------------------------------------------------------------------- #
 # ---------------------------------------------------------------------------- #
@@ -308,7 +404,7 @@ num_simulacoes = 10^4
 # ---------------------------------------------------------------------------- #
 # ---------------------------------------------------------------------------- #
 
-pb <- progress_bar$new(format = "(:spin) [:bar] :percent [Tempo decorrido: :elapsedfull || Tempo restante estimado: :eta]",
+pb = progress_bar$new(format = "(:spin) [:bar] :percent [Tempo decorrido: :elapsedfull || Tempo restante estimado: :eta]",
                        total = num_simulacoes,
                        complete = "=",   # Completion bar character
                        incomplete = "-", # Incomplete bar character
@@ -327,7 +423,14 @@ resultado_simulacoes = data.frame(
   time = unique(c(dados_partidas_com_na$home, dados_partidas_com_na$away)),
   probabilidade_campeao = rep(0, length(unique(c(dados_partidas_com_na$home, dados_partidas_com_na$away)))),
   probabilidade_libertadores = rep(0, length(unique(c(dados_partidas_com_na$home, dados_partidas_com_na$away)))),
+  probabilidade_sulamericana = rep(0, length(unique(c(dados_partidas_com_na$home, dados_partidas_com_na$away)))),
   probabilidade_rebaixamento = rep(0, length(unique(c(dados_partidas_com_na$home, dados_partidas_com_na$away))))
+)
+
+# Inicializar um data frame para armazenar as pontuações das simulações
+pontos = data.frame(
+  pontos_para_campeao = numeric(0),
+  pontos_para_evitar_rebaixamento = numeric(0)
 )
 
 # Loop para realizar as simulações
@@ -346,19 +449,140 @@ for (i in 1:num_simulacoes) {
   resultado_simulacoes$probabilidade_libertadores[match(tabela_classificacao_simulacao$time, resultado_simulacoes$time)] = 
     resultado_simulacoes$probabilidade_libertadores[match(tabela_classificacao_simulacao$time, resultado_simulacoes$time)] + as.numeric(tabela_classificacao_simulacao$libertadores)
   
+  # Incrementar a probabilidade do time classificar para a Sul-Americana (7º ao 12º colocado)
+  tabela_classificacao_simulacao$sulamericana = row_number(desc(tabela_classificacao_simulacao$pontos)) >= 7 & row_number(desc(tabela_classificacao_simulacao$pontos)) <= 12
+  resultado_simulacoes$probabilidade_sulamericana[match(tabela_classificacao_simulacao$time, resultado_simulacoes$time)] = 
+    resultado_simulacoes$probabilidade_sulamericana[match(tabela_classificacao_simulacao$time, resultado_simulacoes$time)] + as.numeric(tabela_classificacao_simulacao$sulamericana)
+  
   # Incrementar a probabilidade do time ser rebaixado
   rebaixados = tail(tabela_classificacao_simulacao$time, 4)
   resultado_simulacoes$probabilidade_rebaixamento[match(rebaixados, resultado_simulacoes$time)] = 
     resultado_simulacoes$probabilidade_rebaixamento[match(rebaixados, resultado_simulacoes$time)] + 1
+  
+  # Calcular o número de pontos necessário para ser campeão (pontuação do segundo colocado + 1 ponto)
+  segundo_colocado_pontos = tabela_classificacao_simulacao$pontos[2]
+  pontos_para_ser_campeao = segundo_colocado_pontos + 1
+  
+  # Calcular o número de pontos necessário para evitar o rebaixamento (pontuação do décimo sétimo colocado + 1 ponto)
+  decimo_setimo_colocado_pontos = tabela_classificacao_simulacao$pontos[17]
+  pontos_para_evitar_rebaixamento = decimo_setimo_colocado_pontos + 1
+  
+  # Armazenar os valores calculados nas probabilidades
+  pontos = rbind(pontos, c(pontos_para_ser_campeao, pontos_para_evitar_rebaixamento))
 }
 
 # Calcular as probabilidades dividindo pelo número de simulações
 resultado_simulacoes$probabilidade_campeao = resultado_simulacoes$probabilidade_campeao / num_simulacoes
 resultado_simulacoes$probabilidade_libertadores = resultado_simulacoes$probabilidade_libertadores / num_simulacoes
+resultado_simulacoes$probabilidade_sulamericana = resultado_simulacoes$probabilidade_sulamericana / num_simulacoes
 resultado_simulacoes$probabilidade_rebaixamento = resultado_simulacoes$probabilidade_rebaixamento / num_simulacoes
 
 # Ordenar o resultado das simulações pela probabilidade de ser campeão e pela probabilidade de classificação para a Libertadores
-resultado_simulacoes = resultado_simulacoes[order(-resultado_simulacoes$probabilidade_campeao, -resultado_simulacoes$probabilidade_libertadores, resultado_simulacoes$probabilidade_rebaixamento), ]
+resultado_simulacoes = resultado_simulacoes[order(-resultado_simulacoes$probabilidade_campeao, -resultado_simulacoes$probabilidade_libertadores, -resultado_simulacoes$probabilidade_sulamericana, resultado_simulacoes$probabilidade_rebaixamento), ]
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
 
 # Exibir a tabela com as probabilidades
 print(resultado_simulacoes)
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+# Pontuação
+colnames(pontos) = c("pontos_para_ser_campeao", "pontos_para_evitar_rebaixamento")
+
+# Ordene o data.frame com base na coluna 'pontos_para_ser_campeao'
+pontos_ordenados = pontos %>%
+  arrange(pontos_para_ser_campeao)
+
+# Use a função count para contar as ocorrências de cada valor em 'pontos_para_ser_campeao'
+agregado = pontos_ordenados %>%
+  count(pontos_para_ser_campeao)
+
+# Calcule a probabilidade acumulada
+agregado$Probabilidade_Acumulada = cumsum(agregado$n) / sum(agregado$n)
+
+# Renomeie as colunas
+colnames(agregado) = c("Pontuacao", "Frequencia", "Probabilidade_Acumulada")
+
+# Exiba o data.frame resultante
+print(agregado)
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+# Visualiza o histograma de pontuações para ser campeão brasileiro
+ggplot(pontos, aes(x = pontos_para_ser_campeao)) +
+  geom_histogram(binwidth = 2, fill = "#f3c52e", color = "black") +
+  labs(
+    title = "Distribuição de pontuações para ser campeão brasileiro",
+    subtitle = "Temporada 2023",
+    x = "Pontuação",
+    y = "Frequência"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.position = "none"
+  )
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+# Ordene o data.frame com base na coluna 'pontos_para_evitar_rebaixamento', da pontuação máxima para a mínima
+pontos_rebaixamento_ordenados <- pontos %>%
+  arrange(desc(pontos_para_evitar_rebaixamento))
+
+# Use a função count para contar as ocorrências de cada valor em 'pontos_para_evitar_rebaixamento'
+agregado_rebaixamento <- pontos_rebaixamento_ordenados %>%
+  count(pontos_para_evitar_rebaixamento) %>%
+  arrange(desc(pontos_para_evitar_rebaixamento))
+
+# Calcule a probabilidade acumulada
+agregado_rebaixamento$Probabilidade_Acumulada <- cumsum(agregado_rebaixamento$n) / sum(agregado_rebaixamento$n)
+
+# Renomeie as colunas
+colnames(agregado_rebaixamento) <- c("Pontuacao", "Frequencia", "Probabilidade_Acumulada")
+
+# Exiba o data.frame resultante
+print(agregado_rebaixamento)
+
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+# Visualiza o histograma de pontuações para evitar o rebaixamento
+ggplot(pontos, aes(x = pontos_para_evitar_rebaixamento)) +
+  geom_histogram(binwidth = 2, fill = "#f3c52e", color = "black") +
+  labs(
+    title = "Distribuição de pontuações para evitar o rebaixamento",
+    subtitle = "Temporada 2023",
+    x = "Pontuação",
+    y = "Frequência"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.position = "none"
+  )
